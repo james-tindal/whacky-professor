@@ -1,18 +1,28 @@
 'use client'
-import '@/misc/logic'
-import { useProfessor } from '@/misc/logic'
-import { useRef } from 'react'
+import '@/misc/professor'
+import { useProfessor } from '@/misc/professor'
+import useIsClient from '@/misc/useIsClient'
+import { Suspense, useRef } from 'react'
 
 export default function Home() {
-  const dialogue = useProfessor()
+  const isClient = useIsClient()
+  if (isClient) return (
+    <Suspense>
+      <Transcript />
+    </Suspense>
+  )
+} 
+
+function Transcript() {
+  const transcript = useProfessor()
   const transcriptItemEl = useRef<HTMLParagraphElement>(null)
   transcriptItemEl.current?.scrollIntoView?.(false)
 
-  if (dialogue.length > 0) return (
+  return (
     <div className="transcript-container">
       <div className="transcript">
         {
-          dialogue.map(item =>
+          transcript.map(item =>
             <p key={item.item_id} className={`transcript-item ${item.role}`} ref={transcriptItemEl}>
               {item.text}
             </p>
@@ -21,4 +31,4 @@ export default function Home() {
       </div>
     </div>
   )
-} 
+}
