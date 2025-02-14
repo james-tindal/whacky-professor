@@ -45,7 +45,7 @@ a {
 
 html, body { height: 100% }
 body {
-  background-image: url('@/public/zany-professor.webp');
+  background-image: url('../public/zany-professor.webp');
   background-position: center;
   background-size: cover;
 

@@ -13,7 +13,7 @@ dataChannel.send(ClientEvent.session.update({
   session: {
       modalities: ['text', 'audio'],
       instructions: prompt,
-      voice: 'sage',
+      voice: 'ballad',
       input_audio_format: 'pcm16',
       output_audio_format: 'pcm16',
       input_audio_transcription: {
