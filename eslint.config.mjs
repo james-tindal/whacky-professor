@@ -1,12 +1,10 @@
-import { dirname } from 'path'
-import { fileURLToPath } from 'url'
 import { FlatCompat } from '@eslint/eslintrc'
+import stylistic from '@stylistic/eslint-plugin'
+import parserTs from '@typescript-eslint/parser'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
 
 const compat = new FlatCompat({
-  baseDirectory: __dirname,
+  baseDirectory: import.meta.dirname,
 })
 
 const eslintConfig = [
@@ -17,7 +15,24 @@ const eslintConfig = [
   {
     rules: {
       '@typescript-eslint/no-namespace': 'off',
-      '@typescript-eslint/no-unused-vars': 'off'
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx', '*.js'],
+    languageOptions: {
+      parser: parserTs,
+    },
+    plugins: {
+      '@stylistic': stylistic
+    },
+    rules: {
+      '@stylistic/semi': ['error', 'never'],
+      '@stylistic/quotes': ['error', 'single'],
+      '@stylistic/arrow-parens': ['error', 'as-needed'],
+      '@stylistic/linebreak-style': 'error',
+      '@stylistic/eol-last': 'error',
     }
   }
 ]

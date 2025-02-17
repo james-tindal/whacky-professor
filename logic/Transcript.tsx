@@ -93,6 +93,7 @@ function useTranscript() {
   return { addItem, appendItemText, setItemText, transcript }
 
   function addItem(item_id: string, role: TranscriptItem['role']) {
+    console.log('addItem', item_id)
     const newItem = { text: '', role, item_id }
     setTranscript(transcript => [...transcript, newItem])
   }
@@ -102,7 +103,7 @@ function useTranscript() {
       transcript.findIndex(item => item.item_id === item_id)
   
     if (!(index >= 0))
-      throw `setItemText didn't find an item with id ${item_id}`
+      throw new Error(`setItemText didn't find an item with id ${item_id}`)
     
     setTranscript(transcript => {
       const oldItem = transcript[index]
@@ -116,7 +117,7 @@ function useTranscript() {
       transcript.findIndex(item => item.item_id === item_id)
 
     if (!(index >= 0))
-      throw `setItemText didn't find an item with id ${item_id}`
+      throw new Error(`setItemText didn't find an item with id ${item_id}`)
 
     setTranscript(transcript => {
       const oldItem = transcript[index]

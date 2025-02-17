@@ -45,12 +45,12 @@ a {
 
 html, body { height: 100% }
 body {
-  background-image: url('zany-professor.webp');
+  background-image: url('../public/zany-professor.webp');
   background-position: center;
   background-size: cover;
 
   display: flex;
-  justify-content: center;  /* Horizontally center */
+  justify-content: center;
   align-items: center; 
 }
 
