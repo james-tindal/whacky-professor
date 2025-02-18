@@ -1,5 +1,5 @@
 import { useReducer } from 'react'
 
-export function useForceUpdate() {
+export function useRender() {
   return useReducer(() => ({}), {})[1] as () => void
 }

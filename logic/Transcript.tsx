@@ -1,50 +1,120 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { MemoryStream } from 'xstream'
+
 import { DataChannel, useDataChannel } from './Initialise'
-import { useAsync } from '@/utilities/usePromise'
+import { sessionSettings } from './settings'
+import { ServerEvent } from '@/types/ServerEvent'
 import { ClientEvent } from '@/types/ClientEvent'
-import { prompt } from './prompt'
+import { useAsync } from '@/utilities/usePromise'
+import { useRender } from '@/utilities/useRender'
+import { ReactiveMap } from '@/utilities/reactive-map'
+import { Iterate } from '@/utilities/Iterate'
+
 
 export function Transcript() {
   const dataChannel = useDataChannel()
-  const { transcript, ...t } = useTranscript()
-  console.log('transcript', transcript)
-  useEffect(() => {
-    t.addItem('hello', 'assistant')
-    t.setItemText('hello', 'This was whatever sometimes yo')
-  }, [])
-  dataChannel.listen(data => {
-    if (data.type === 'response.audio_transcript.delta')
-      t.appendItemText(data.item_id, data.delta)
 
-    if ( data.type === 'conversation.item.created'
-      && data.item.type === 'message'
-      && data.item.role !== 'system'
-    )
-      t.addItem(data.item.id, data.item.role)
+  const newItem = dataChannel.changed.filter((event): event is NewItem =>
+       event.type === 'conversation.item.created'
+    && event.item.type === 'message'
+    && event.item.role !== 'system'
+  )
+  const suffix = dataChannel.changed.filter(event =>
+    event.type === 'response.audio_transcript.delta')
+  const userTranscript = dataChannel.changed.filter(event =>
+    event.type === 'conversation.item.input_audio_transcription.completed')
 
-    if (data.type === 'conversation.item.input_audio_transcription.completed')
-      t.setItemText(data.item_id, data.transcript)
+  const transcript = new ReactiveMap<ItemId, TranscriptItem>
+  newItem.subscribe({ next(event) {
+    const text = event.item.role === 'assistant'
+    ? suffix
+        .filter(event_ => event_.item_id === event.item.id)
+        .map(event => event.delta)
+        .fold((a, b) => a + b, '')
+    : userTranscript
+        .filter(event_ => event_.item_id === event.item.id)
+        .map(event => event.transcript)
+        .startWith('')
+    transcript.set(event.item.id, { text, role: event.item.role })
+  }})
+
+  const x = newItem.map(event => {
+    const text = event.item.role === 'assistant'
+    ? suffix
+        .filter(event_ => event_.item_id === event.item.id)
+        .map(event => event.delta)
+        .fold((a, b) => a + b, '')
+    : userTranscript
+        .filter(event_ => event_.item_id === event.item.id)
+        .map(event => event.transcript)
+        .startWith('')
+    transcript.set(event.item.id, { text, role: event.item.role })
   })
+  .mapTo(transcript)
+
+
+
+
+  const render = useRender()
+  transcript.subscribe(render)
 
   useAsync(() =>
     sendSettingsAndStart(dataChannel, sessionSettings))
 
-  const transcriptItemEl = useRef<HTMLParagraphElement>(null)
-  transcriptItemEl.current?.scrollIntoView?.(false)
+  // Need to consider whether I should be cleaning up memory on unmount.
+  // For every thing, ask when it should be cleaned up. 
+  // Write a test to ensure it is.
 
+
+  if (transcript.size === 0) return
   return (
     <div className="transcript-container">
       <div className="transcript">
-        {
-          transcript.map(item =>
-            <p key={item.item_id} className={`transcript-item ${item.role}`} ref={transcriptItemEl}>
-              {item.text}
-            </p>
-          )
-        }
+        <TranscriptItems transcript={transcript} />
       </div>
     </div>
   )
+}
+
+type ItemId = string
+type TranscriptItem = {
+  role: 'assistant' | 'user'
+  text: MemoryStream<string>
+}
+type Transcript = Map<ItemId, TranscriptItem>
+
+function TranscriptItems({ transcript }: { transcript: Transcript }) {
+  const childrenProps = transcript.entries().map(
+    ([id, { role, text }], index) =>
+      ({ id, role, text, isLatest: transcript.size === index - 1 }))
+
+  return (
+    <Iterate
+      key="id"
+      iterable={childrenProps}
+    >{TranscriptItem}</Iterate>
+  )
+}
+
+function TranscriptItem(props: { id: string, text: MemoryStream<string>, role: 'assistant' | 'user', isLatest: boolean }) {
+  const scrollIntoView = useScrollIntoView()
+  return (
+    <p
+      key={props.id}
+      className={`transcript-item ${props.role}`}
+      {...props.isLatest && { ref: scrollIntoView }}
+    >{ 'props.text' }</p>
+  )
+}
+
+const useScrollIntoView = () =>
+  useCallback((el: Element | null) => el?.scrollIntoView(), [])
+
+type NewItem = ServerEvent.conversation.item.created & {
+  item: {
+    type: 'message'
+    role: 'user' | 'assistant'
+  }
 }
 
 async function sendSettingsAndStart(
@@ -54,77 +124,4 @@ async function sendSettingsAndStart(
   await dataChannel.isOpen
   dataChannel.send(sessionSettings)
   dataChannel.send({ type: 'response.create' })
-}
-
-const sessionSettings = ClientEvent.session.update({
-  type: 'session.update',
-  session: {
-    modalities: ['text', 'audio'],
-    instructions: prompt,
-    voice: 'ballad',
-    input_audio_format: 'pcm16',
-    output_audio_format: 'pcm16',
-    input_audio_transcription: {
-      model: 'whisper-1'
-    },
-    turn_detection: {
-      type: 'server_vad',
-      threshold: 0.5,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 1500,
-      create_response: true
-    },
-    tool_choice: 'auto',
-    temperature: 0.8,
-    max_response_output_tokens: 'inf'
-  }
-})
-
-type TranscriptItem = {
-  role: 'assistant' | 'user'
-  text: string
-  item_id: string
-}
-type Transcript = TranscriptItem[]
-
-function useTranscript() {
-  const [transcript, setTranscript] = useState<Transcript>([])
-
-  return { addItem, appendItemText, setItemText, transcript }
-
-  function addItem(item_id: string, role: TranscriptItem['role']) {
-    console.log('addItem', item_id)
-    const newItem = { text: '', role, item_id }
-    setTranscript(transcript => [...transcript, newItem])
-  }
-
-  function appendItemText(item_id: string, suffix: string) {
-    const index =
-      transcript.findIndex(item => item.item_id === item_id)
-  
-    if (!(index >= 0))
-      throw new Error(`setItemText didn't find an item with id ${item_id}`)
-    
-    setTranscript(transcript => {
-      const oldItem = transcript[index]
-      const newItem = { ...oldItem, text: oldItem + suffix }
-      return transcript.with(index, newItem)
-    })
-  }
-
-  function setItemText(item_id: string, text: string) {
-    const index =
-      transcript.findIndex(item => item.item_id === item_id)
-
-    if (!(index >= 0))
-      throw new Error(`setItemText didn't find an item with id ${item_id}`)
-
-    setTranscript(transcript => {
-      const oldItem = transcript[index]
-      console.log({oldItem})
-      const newItem = { ...oldItem, text }
-      console.log({newItem})
-      return transcript.with(index, newItem)
-    })
-  }
 }

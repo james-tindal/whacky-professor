@@ -1,8 +1,11 @@
+import type { PropsWithChildren } from 'react'
+import type { Stream } from 'xstream'
+import fromEvent from 'xstream/extra/fromEvent'
+
 import { ClientEvent } from '@/types/ClientEvent'
 import { ServerEvent } from '@/types/ServerEvent'
 import { createContext } from '@/utilities/createContext'
 import { useAsync } from '@/utilities/usePromise'
-import { PropsWithChildren } from 'react'
 
 export function Initialise({ children }: PropsWithChildren) {
   const promiseState = useAsync(initialise)
@@ -110,10 +113,24 @@ class RTC {
 export type DataChannel = ReturnType<typeof DataChannel>
 function DataChannel(rtc: RTCPeerConnection) {
   const dataChannel = rtc.createDataChannel('oai-events')
-  let _listener: ServerListener
-  dataChannel.onmessage = event =>
-    _listener?.(event.data)
+  const changed = fromEvent(dataChannel, 'message') as unknown as Stream<ServerEvent>
+  // chould be called serverEvents?
 
+  // The actual purpose of this module is to:
+  // start and listen to events
+
+  // it should only be started when someone subscribes to events.
+  // the Map should be inside the stream in closure
+  // all references dropped when stream stops (no listeners)
+
+  async function sendSettingsAndStart(
+    dataChannel: DataChannel,
+    sessionSettings: ClientEvent.session.update
+  ) {
+    await dataChannel.isOpen
+    dataChannel.send(sessionSettings)
+    dataChannel.send({ type: 'response.create' })
+  }
   return {
     isOpen: new Promise<void>(resolve =>
       dataChannel.onopen = () => resolve()
@@ -121,19 +138,12 @@ function DataChannel(rtc: RTCPeerConnection) {
     send(obj: ClientEvent) {
       dataChannel.send(JSON.stringify(obj))
     },
-    listen(listener: ServerListener) {
-      _listener = listener
-    }
+    changed
   }
 }
 
 const { Provider, useContext: useDataChannel } = createContext<DataChannel>()
 export { useDataChannel }
-
-export type ServerListener = (data: ServerEvent) => void
-
-const SECRET_KEY = 'sk-proj-oPeQd2MyCGjr7MMayv6eshFFMzGoVB7aeBWXH8AUZdlibXSLlczjQf1ur-zFTZAFYmGGITvFOE'
-                  + 'T3BlbkFJzG9k3-ddBpn9Q6BD1H4cFGQLjVP0A7eJrc9ek48DfY0oSgETssA66oicL7ld_xQDL3Mo91IeAA'
     
 type Initialise = InitialiseFailed | InitialiseSuccess
 type InitialiseFailed = {
