@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Stream } from 'xstream'
+import { Stream } from 'xstream'
 
 export function useStream<T>(stream: Stream<T> | (() => Stream<T>)) {
   const _stream = useMemo(() => {
-    if (typeof stream === 'function')
-      return stream()
-    else
+    if (stream instanceof Stream)
       return stream
+    else
+      return stream()
   }, [])
 
   const [state, setState] = useState<StreamResult<T>>(Pending)

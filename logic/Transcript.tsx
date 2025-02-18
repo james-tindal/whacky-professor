@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { MemoryStream } from 'xstream'
 
 import { RealtimeApi, useRealtimeApi } from './Initialise'
@@ -68,25 +68,30 @@ function TranscriptItems({ transcript }: { transcript: Transcript }) {
 
   return (
     <Iterate
-      key="id"
+      pickKey="id"
       iterable={childrenProps}
     >{TranscriptItem}</Iterate>
   )
 }
 
-function TranscriptItem(props: { id: string, text: MemoryStream<string>, role: 'assistant' | 'user', isLatest: boolean }) {
+function TranscriptItem(props: { id: string, text: MemoryStream<string>, role: 'assistant' | 'user' }) {
   const scrollIntoView = useScrollIntoView()
+  const textResult = useStream(props.text)
+  if (textResult.tag === 'pending') return
   return (
     <p
       key={props.id}
       className={`transcript-item ${props.role}`}
-      {...props.isLatest && { ref: scrollIntoView }}
-    >{ 'props.text' }</p>
+      ref={scrollIntoView}
+    >{ textResult.value }</p>
   )
 }
 
-const useScrollIntoView = () =>
-  useCallback((el: Element | null) => el?.scrollIntoView(), [])
+const useScrollIntoView = () => {
+  const ref = useRef<HTMLParagraphElement>(null)
+  ref.current?.scrollIntoView()
+  return ref
+}
 
 type NewItem = ServerEvent.conversation.item.created & {
   item: {

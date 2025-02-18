@@ -116,7 +116,9 @@ class RTC {
 export type RealtimeApi = ReturnType<typeof RealtimeApi>
 function RealtimeApi(rtc: RTCPeerConnection) {
   const dataChannel = rtc.createDataChannel('oai-events')
-  const dataChannelEvents = fromEvent(dataChannel, 'message') as unknown as Stream<ServerEvent>
+  const dataChannelEvents =
+    fromEvent<MessageEvent<string>>(dataChannel, 'message')
+    .map(event => JSON.parse(event.data) as ServerEvent)
 
   const dataChannelIsOpen = new Promise<void>(resolve =>
     dataChannel.onopen = () => resolve())
