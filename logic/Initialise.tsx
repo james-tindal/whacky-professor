@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react'
-import xs, { type Stream } from 'xstream'
+import xs from 'xstream'
 import fromEvent from 'xstream/extra/fromEvent'
 
 import { ClientEvent } from '@/types/ClientEvent'
