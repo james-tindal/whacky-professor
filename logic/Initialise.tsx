@@ -1,11 +1,12 @@
 import type { PropsWithChildren } from 'react'
-import type { Stream } from 'xstream'
+import xs, { type Stream } from 'xstream'
 import fromEvent from 'xstream/extra/fromEvent'
 
 import { ClientEvent } from '@/types/ClientEvent'
 import { ServerEvent } from '@/types/ServerEvent'
 import { createContext } from '@/utilities/createContext'
 import { useAsync } from '@/utilities/usePromise'
+import { SECRET_KEY, sessionSettings } from './settings'
 
 export function Initialise({ children }: PropsWithChildren) {
   const promiseState = useAsync(initialise)
@@ -15,13 +16,15 @@ export function Initialise({ children }: PropsWithChildren) {
     case 'rejected': throw promiseState.reason
   }
 
-  switch (promiseState.value.tag) {
+  const result = promiseState.value
+
+  switch (result.tag) {
     case 'webrtc not available':
       return <Failed>WebRTC not available. Can't connect to server.</Failed>
     case 'microphone error':
       return <Failed>Couldn't get microphone input</Failed>
     case 'success':
-      return <Provider value={promiseState.value.dataChannel}>{children}</Provider>
+      return <Provider value={result.realtimeApi}>{children}</Provider>
     default:
       return <Failed>{JSON.stringify(promiseState)}</Failed>
   }
@@ -42,14 +45,14 @@ export async function initialise(): Promise<Initialise> {
   rtc.addMicrophone(microphone)
   rtc.createAudioOutput()
 
-  // const error = await
-  //   rtc.startSession(SECRET_KEY)
-  // if (error)
-  //   return error
+  const error = await
+    rtc.startSession(SECRET_KEY)
+  if (error)
+    return error
 
   return {
     tag: 'success',
-    dataChannel: rtc.dataChannel
+    realtimeApi: rtc.realtimeApi
   }
 }
 
@@ -62,7 +65,7 @@ const getMicrophone = () =>
 
 class RTC {
   private rtc = new RTCPeerConnection
-  public dataChannel = DataChannel(this.rtc)
+  public realtimeApi = RealtimeApi(this.rtc)
 
   addMicrophone(microphone: MediaStream) {
     this.rtc.addTrack(microphone.getTracks()[0])
@@ -110,40 +113,38 @@ class RTC {
   }
 }
 
-export type DataChannel = ReturnType<typeof DataChannel>
-function DataChannel(rtc: RTCPeerConnection) {
+export type RealtimeApi = ReturnType<typeof RealtimeApi>
+function RealtimeApi(rtc: RTCPeerConnection) {
   const dataChannel = rtc.createDataChannel('oai-events')
-  const changed = fromEvent(dataChannel, 'message') as unknown as Stream<ServerEvent>
-  // chould be called serverEvents?
+  const dataChannelEvents = fromEvent(dataChannel, 'message') as unknown as Stream<ServerEvent>
 
-  // The actual purpose of this module is to:
-  // start and listen to events
+  const dataChannelIsOpen = new Promise<void>(resolve =>
+    dataChannel.onopen = () => resolve())
 
-  // it should only be started when someone subscribes to events.
-  // the Map should be inside the stream in closure
-  // all references dropped when stream stops (no listeners)
-
-  async function sendSettingsAndStart(
-    dataChannel: DataChannel,
-    sessionSettings: ClientEvent.session.update
-  ) {
-    await dataChannel.isOpen
-    dataChannel.send(sessionSettings)
-    dataChannel.send({ type: 'response.create' })
+  function send(obj: ClientEvent) {
+    dataChannel.send(JSON.stringify(obj))
   }
-  return {
-    isOpen: new Promise<void>(resolve =>
-      dataChannel.onopen = () => resolve()
-    ),
-    send(obj: ClientEvent) {
-      dataChannel.send(JSON.stringify(obj))
+
+  async function sendSettingsAndStart() {
+    await dataChannelIsOpen
+    send(sessionSettings)
+    send({ type: 'response.create' })
+  }
+
+  const startStream = xs.create<never>({
+    start() {
+      sendSettingsAndStart()
     },
-    changed
-  }
+    stop() {}
+  })
+
+  const serverEvents = xs.merge(startStream, dataChannelEvents)
+
+  return { serverEvents, send }
 }
 
-const { Provider, useContext: useDataChannel } = createContext<DataChannel>()
-export { useDataChannel }
+const { Provider, useContext: useRealtimeApi } = createContext<RealtimeApi>()
+export { useRealtimeApi }
     
 type Initialise = InitialiseFailed | InitialiseSuccess
 type InitialiseFailed = {
@@ -160,5 +161,5 @@ type InitialiseFailed = {
 }
 type InitialiseSuccess ={
   tag: 'success',
-  dataChannel: DataChannel
+  realtimeApi: RealtimeApi
 }
